@@ -39,4 +39,4 @@ TEST:
   checkpoint: "epoch_20.pth"
   result: "./Results/162-class/"
 
-DIR: "ckpt/current_experiments/162-class_Hotels_and_ADE"
+DIR: "../semantic-segmentation-pytorch/ckpt/current_experiments/162-class_Hotels_and_ADE"

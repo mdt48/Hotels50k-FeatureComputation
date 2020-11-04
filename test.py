@@ -8,15 +8,17 @@ import torch
 import torch.nn as nn
 from scipy.io import loadmat
 import csv
-# Our libs
+# Our data
 from dataset import TestDataset
 from models import ModelBuilder, SegmentationModule
-from utils import colorEncode, find_recursive, setup_logger
+from utils import colorEncode, find_recursive, setup_logger, compute
 from lib.nn import user_scattered_collate, async_copy_to
 from lib.utils import as_numpy
 from PIL import Image
 from tqdm import tqdm
 from config import cfg
+import features
+
 
 # colors = loadmat('data/color150.mat')['colors']
 # names = {}
@@ -65,13 +67,13 @@ def visualize_result(data, pred, cfg):
 
     img_name = info.split('/')[-1]
     Image.fromarray(im_vis).save(
-        os.path.join(cfg.TEST.result, img_name.replace('.jpg', '.png')))
+        os.path.join(features.path, img_name.replace('.jpg', '.png')))
 
 
 def test(segmentation_module, loader, gpu):
     segmentation_module.eval()
 
-    pbar = tqdm(total=len(loader))
+    # pbar = tqdm(total=len(loader))
     for batch_data in loader:
         # process data
         batch_data = batch_data[0]
@@ -80,11 +82,11 @@ def test(segmentation_module, loader, gpu):
         img_resized_list = batch_data['img_data']
 
         import os
-        import features
-        chain = batch_data['info'].split("/")[7]
+        chain = batch_data['info'].split("/")[8]
+        h_id = batch_data['info'].split("/")[9]
         img = batch_data['info'].split("/")[-1].split(".")[0]
-        path = os.path.join("features", chain, img)
-
+        path = os.path.join("features", chain, h_id, img)
+        # print(path)
         features.path = path;
         if not os.path.exists(path):
             os.makedirs(path)
@@ -106,15 +108,19 @@ def test(segmentation_module, loader, gpu):
 
             _, pred = torch.max(scores, dim=1)
             pred = as_numpy(pred.squeeze(0).cpu())
+        a = compute(features.feat_2048, features.feat_162, features.path)
+        torch.save(a, features.path + "/fts.pt")
+        torch.save(features.feat_2048, features.path + "/fts_2048.pt")
 
         # visualization
+ 
         visualize_result(
             (batch_data['img_ori'], batch_data['info']),
             pred,
             cfg
         )
 
-        pbar.update(1)
+        # pbar.update(1)
 
 
 def main(cfg, gpu):
