@@ -16,7 +16,11 @@ ckpt/
 hotels-resnet50dilated-ppm_deepsup/
 .vscode/
 features/
+features2/
+hists/
+*.pckl
 pretrained/
+*.gz
 runs/
 .cph_tmpeq2yawo9/
 hotels-resnet50dilated-ppm_deepsup/

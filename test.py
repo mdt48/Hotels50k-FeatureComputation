@@ -85,7 +85,11 @@ def test(segmentation_module, loader, gpu):
         chain = batch_data['info'].split("/")[8]
         h_id = batch_data['info'].split("/")[9]
         img = batch_data['info'].split("/")[-1].split(".")[0]
-        path = os.path.join("features", chain, h_id, img)
+        
+        ty = batch_data['info'].split("/")[-2]
+
+        path = os.path.join("features2", chain, h_id, img)
+
         # print(path)
         features.path = path;
         if not os.path.exists(path):

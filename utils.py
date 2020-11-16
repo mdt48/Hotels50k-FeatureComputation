@@ -12,6 +12,7 @@ from scipy.interpolate import interp1d
 from glob import glob
 from lib.utils import as_numpy
 import csv
+import pickle
 
 def setup_logger(distributed_rank=0, filename="log.txt"):
     logger = logging.getLogger("Logger")
@@ -208,7 +209,7 @@ def parse_devices(input_devices):
 
 def compute(feat_2048, feat_162, path):
     cuda0 = torch.device('cuda:0')
-    num_classes = 162
+    num_classes = 150
     # size of each feat
     size_2048 = feat_2048.size()
     size_162 = feat_162.size()
@@ -220,13 +221,12 @@ def compute(feat_2048, feat_162, path):
     feat_162_pred = as_numpy(feat_162_pred.squeeze(0))
 
     accepted_classes = [0 for i in range(num_classes)]
-    for i in range(len(feat_162_pred)):
-        for j in range(len(feat_162_pred[0])):
-            accepted_classes[feat_162_pred[i][j]] += 1
+    # for i in range(len(feat_162_pred)):
+    #     for j in range(len(feat_162_pred[0])):
+    #         accepted_classes[feat_162_pred[i][j]] += 1
 
     #get features with more than 10% of pixels
-    threshold = int(0.10 * num_classes)
-    accepted_classes = [i for i in range(len(accepted_classes)) if (accepted_classes[i] / num_classes) > threshold]
+    
 
     x = nn.functional.interpolate(torch.from_numpy(feat_162_pred).unsqueeze(0).unsqueeze(0).type(torch.FloatTensor), size=(size_2048[2], size_2048[3]), mode='bilinear', align_corners=False)
     x = x.squeeze().squeeze().type(torch.int64)
@@ -234,6 +234,8 @@ def compute(feat_2048, feat_162, path):
     # x = x.permute((0,2,3,1))
     features_coords = torch.zeros((size_2048[2], size_2048[3], 1))
 
+    threshold = 0.05; pix = x.size()[0] * x.size()[1]
+    accepted_classes = [i+1 for i in range(len(accepted_classes)) if (len(np.argwhere(x.numpy() == i+1)) / pix) > threshold]
     # # calculate average for each class in 2048d
     feat_2048 = feat_2048.permute((0,2,3,1)).type(torch.FloatTensor)
     img_rep = torch.zeros((len(accepted_classes), 2048),device=cuda0).type(torch.FloatTensor)
@@ -247,7 +249,7 @@ def compute(feat_2048, feat_162, path):
 
 def ft_csv(accepted, path):
     names = {}
-    with open('../semantic-segmentation-pytorch/data/object150_info.csv') as f:
+    with open('/pless_nfs/home/mdt_/semantic-segmentation-pytorch/data/object150_info.csv') as f:
         reader = csv.reader(f)
         next(reader)
         for row in reader:
@@ -257,8 +259,5 @@ def ft_csv(accepted, path):
         writer = csv.writer(csvfile, delimiter=",")
         writer.writerow(["ID", "NAME"])
         for cl in accepted:
-            if cl > 150:
-                writer.writerow([cl, "placeholder hotesl label"])
-                break
-            writer.writerow([cl, names[cl]])
+            writer.writerow([cl+1, names[cl+1]])
             
