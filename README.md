@@ -1,1 +1,1 @@
-My fork of the CSAIL semantic-segmentation-pytorch
+Automating the feature computation, and analysis of Hotels50k images
