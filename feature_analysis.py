@@ -12,9 +12,12 @@ import seaborn as sns
 import os 
 import pprint
 import csv
+from torch import chunk
 from tqdm import tqdm
 import pickle
-
+import plotly.express as px
+import plotly.graph_objects as go
+from multiprocessing import Pool
 
 # %%
 def whole_image_avg(t):
@@ -61,14 +64,25 @@ def get_pairs(rooms):
 
 
 # %%
-def calculate_hist(data, k):
-    vals = [f[0] for f in data.values()]
-    p = plt.hist(vals, bins=15, histtype="stepfilled", alpha=0.3, color="r", density=True, label="Similarity Between Images of The Same Room")
-    path = os.path.join("hists/", k)
-    if not os.path.exists(path):
-        os.mkdir(path)
-    plt.savefig(os.path.join(path,"similarity_same_room.png"))
+def calculate_hist_same_room(data, k):
+    for key in data.keys():
+        # vals = [f[0] for f in data[key].values()]
+        vals = [data[key][0]]
+    # p = plt.hist(vals, bins=15, histtype="stepfilled", alpha=0.3, color="r", density=True, label="Similarity Between Images of The Same Room")
+        fig = go.Figure(data=[go.Histogram(x=vals)])
+        path = os.path.join("hists/", k, key)
+        if not os.path.exists(path):
+            os.makedirs(path)
+        fig.write_image(os.path.join(path,"similarity_same_hotel.png"))
 
+def calulate_hist_per_room(data, k):
+    for key in data.keys():
+        vals = data[key][0]
+        fig = go.Figure(data=[go.Histogram(x=[vals])])
+        path = os.path.join("hists/", k, key)
+        if not os.path.exists(path):
+            os.makedirs(path)
+        fig.write_image(os.path.join(path,"similarity_of_same_room.png"))
 
 # %%
 def cos_sim(pairs, rooms):
@@ -82,44 +96,85 @@ def cos_sim(pairs, rooms):
         pair_cos[pair[0] + "-" + pair[1]] = float(cos(h1, h2)) 
     return pair_cos
 
+def worker(chains):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    Similarity = {}
+    for ch in chains:
+        print(ch)
+        # print("Process: {}; Chain: {}".format(os.getpid(), ch))
+        Similarity[ch] = {}
+        for root, hotels, ___ in list(os.walk(os.path.join("features2", ch))):
+            hotels = sorted(hotels, key=sorter)
+            hotel_self_similarity = None
+            hotel_vector = torch.zeros((2048)).to(device)
+            for idx, h in enumerate(hotels):
+                # print("Process: {}; Chain {}; Percentage Complete: {}".format(os.getpid(), ch, idx+1/len(hotels)))
+                rooms = imgs_for_hotel(os.path.join(root, h))
+                pairs = get_pairs(rooms)
+                for r in rooms.keys():
+                    if len(rooms[r]) == 3:
+                        hotel_vector += whole_image_avg(torch.load(rooms[r][2]))
+                if not pairs:
+                    continue
+                p_c = cos_sim(pairs, rooms)
+                # print("Chain: {}; ID: {}; AVG Sim: {}".format(ch, h, hotel_self_similarity))
+                hotel_self_similarity = sum(p_c.values()) / len(p_c.values())
+                # hist = calculate_hist(p_c)
+                Similarity[ch][h] = (hotel_self_similarity,hotel_vector / len(rooms.keys()))
+            # for k in Similarity.keys():
+                # print("Histogram for chain: " + ch)
+                # if Similarity.values():
+                #     # calulate_hist_per_room(Similarity[k], k)
+            calculate_hist_same_room(Similarity[ch], ch)
+            Similarity = {}
 # %%
+def sorter(x):
+    return int(x)
 def comp():
     hist = None
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # structure-->chain-->hotel-->similarity: (similarity for that hotel, the averaged vector for that hotel)
     # so similarity of the rooms in a certain hotel
-    Similarity = {}
-    for _, chains, __ in os.walk("features2"):
-        chains = sorted(chains)
-        for ch in tqdm(chains, desc="Chains"):
-            Similarity[ch] = {}
-            for root, hotels, ___ in list(os.walk(os.path.join("features2", ch))):
-                hotels = sorted(hotels)
-                hotel_self_similarity = None
-                hotel_vector = torch.zeros((2048)).to(device)
-                for h in hotels:
-                    rooms = imgs_for_hotel(os.path.join(root, h))
-                    pairs = get_pairs(rooms)
-                    for r in rooms.keys():
-                        hotel_vector += whole_image_avg(torch.load(rooms[r][2]))
-                    if not pairs:
-                        continue
-                    p_c = cos_sim(pairs, rooms)
-                    # print("Chain: {}; ID: {}; AVG Sim: {}".format(ch, h, hotel_self_similarity))
-                    hotel_self_similarity = sum(p_c.values()) / len(p_c.values())
-                    # hist = calculate_hist(p_c)
-                    Similarity[ch][h] = (hotel_self_similarity,hotel_vector / len(rooms.keys()))
-    return Similarity
+    for _, chains, __ in list(os.walk("features2")):
+        chains = sorted(chains, key=sorter)
+        worker(chains[1:])
+        # chains = sorted(chains)
+        # with Pool(processes=2) as pool:
+        #     pool.map(worker, chains, chunksize=len(chains)//5)
+        # for ch in tqdm(chains, desc="Chains"):
+        #     Similarity[ch] = {}
+        #     for root, hotels, ___ in list(os.walk(os.path.join("features2", ch))):
+        #         hotels = sorted(hotels)
+        #         hotel_self_similarity = None
+        #         hotel_vector = torch.zeros((2048)).to(device)
+        #         for h in hotels:
+        #             rooms = imgs_for_hotel(os.path.join(root, h))
+        #             pairs = get_pairs(rooms)
+        #             for r in rooms.keys():
+        #                 if len(rooms[r]) == 3:
+        #                     hotel_vector += whole_image_avg(torch.load(rooms[r][2]))
+        #             if not pairs:
+        #                 continue
+        #             p_c = cos_sim(pairs, rooms)
+        #             # print("Chain: {}; ID: {}; AVG Sim: {}".format(ch, h, hotel_self_similarity))
+        #             hotel_self_similarity = sum(p_c.values()) / len(p_c.values())
+        #             # hist = calculate_hist(p_c)
+        #             Similarity[ch][h] = (hotel_self_similarity,hotel_vector / len(rooms.keys()))
+        #         for k in Similarity.keys():
+        #             if Similarity.values():
+        #                 calulate_hist_per_room(Similarity[k], k)
+        #                 calculate_hist_same_room(Similarity[k], k)
+        #         Similarity = {}
                     
 
 def main():
-    data = comp()
+    comp()
 
-    for k in tqdm(data.keys(), desc="Calculating Histograms"):
-        if data.values():
-            calculate_hist(data[k], k)
+    # for k in tqdm(data.keys(), desc="Calculating Histograms"):
+    #     if data.values():
+    #         # calulate_hist_per_room(data[k], k)
+    #         calculate_hist_same_room(data[k], k)
 
 # %%
 if __name__ == "__main__":
