@@ -89,7 +89,11 @@ def cos_sim(pairs, rooms):
 
     pair_cos = {}
     for pair in pairs:
-        h1 = torch.load(rooms[pair[0]][2]); h2 = torch.load(rooms[pair[1]][2])
+        try:
+            h1 = torch.load(rooms[pair[0]][2]); h2 = torch.load(rooms[pair[1]][2])
+        except:
+            print(pair)
+            continue
         h1 = whole_image_avg(h1); h2 = whole_image_avg(h2)
 
         pair_cos[pair[0] + "-" + pair[1]] = float(cos(h1, h2)) 
