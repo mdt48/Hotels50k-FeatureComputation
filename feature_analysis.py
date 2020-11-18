@@ -1,9 +1,9 @@
-# To add a new cell, type '# %%'
-# To add a new markdown cell, type '# %% [markdown]'
-# %%
+# To add a new cell, type ''
+# To add a new markdown cell, type ' [markdown]'
+
 from IPython import get_ipython
 
-# %%
+
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -19,7 +19,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 from multiprocessing import Pool
 
-# %%
+
+
+global_vals = []
+
 def whole_image_avg(t):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cos = torch.nn.CosineSimilarity(dim=0, eps=1e-6)
@@ -33,7 +36,7 @@ def whole_image_avg(t):
     return avg
 
 
-# %%
+
 def imgs_for_hotel(p):
     same_hotel = {}
     for root, dirs, files in os.walk(os.path.join(p)):
@@ -49,7 +52,7 @@ def imgs_for_hotel(p):
     return same_hotel
 
 
-# %%
+
 def get_pairs(rooms):
     num_rooms = len(rooms.keys())
     hotel_id = [f for f in range(num_rooms)]
@@ -63,9 +66,11 @@ def get_pairs(rooms):
     return pairs
 
 
-# %%
+
 def hist_across_chain(data, k):
+    global global_vals
     vals = [data[key][0] for key in data.keys()]
+    global_vals.extend(vals)
     if len(vals) <= 3:
         return
     fig = go.Figure(data=[go.Histogram(x=vals)])
@@ -83,7 +88,16 @@ def hist_per_room(data, k):
             os.makedirs(path)
         fig.write_image(os.path.join(path,"similarity_of_same_room.png"))
 
-# %%
+def hist_final():
+    global global_vals
+    fig = go.Figure(data=[go.Histogram(x=global_vals)])
+    path = "hists/"
+    fig.write_image(os.path.join(path,"global_hist_similarity.png"))
+    
+def hists(data, k):
+    hist_per_room(data, k)
+    hist_across_chain(data, k)
+
 def cos_sim(pairs, rooms):
     cos = torch.nn.CosineSimilarity(dim=0, eps=1e-6)
 
@@ -100,9 +114,6 @@ def cos_sim(pairs, rooms):
     return pair_cos
 
 
-def hists(data, k):
-    hist_per_room(data, k)
-    hist_across_chain(data, k)
 
 def worker(chains):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -129,7 +140,7 @@ def worker(chains):
 
         hists(Similarity[ch], ch)
         Similarity = {}
-# %%
+
 def sorter(x):
     return int(x)
                     
@@ -138,7 +149,7 @@ def main():
     for _, chains, __ in list(os.walk("features2")):
         chains = sorted(chains, key=sorter)
         worker(chains[1:])
+    hist_final()
 
-# %%
 if __name__ == "__main__":
     main()
