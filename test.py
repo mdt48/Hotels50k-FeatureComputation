@@ -88,7 +88,9 @@ def test(segmentation_module, loader, gpu):
         
         ty = batch_data['info'].split("/")[-2]
 
-        path = os.path.join("features2", chain, h_id, img)
+        path = os.path.join("features", chain, h_id, img)
+        if not os.path.exists(path):
+            os.makedirs(path)
 
         # print(path)
         features.path = path;
@@ -112,9 +114,10 @@ def test(segmentation_module, loader, gpu):
 
             _, pred = torch.max(scores, dim=1)
             pred = as_numpy(pred.squeeze(0).cpu())
-        a = compute(features.feat_2048, features.feat_162, features.path)
-        torch.save(a, features.path + "/fts.pt")
-        torch.save(features.feat_2048, features.path + "/fts_2048.pt")
+        # torch.save(features.feat_2048, os.path.join(features.path, "fts.pt"))
+        a = compute(features.feat_150, features.feat_2048_whole, features.path)
+        # torch.save(a, features.path + "/fts.pt")
+        # torch.save(features.feat_2048, features.path + "/fts_2048.pt")
 
         # visualization
  

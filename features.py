@@ -7,8 +7,7 @@ from lib.utils import as_numpy
 
 num_classes = 162
 
-feat_2048 = torch.zeros(size=(1, 2048, 50, 38))
-feat_162 = torch.zeros(size=(1, 162, 640, 480))
-
-
+feat_2048 = torch.zeros(size=(1, 2048))
+feat_2048_whole = torch.zeros(size=(1, 2048, 38, 50))
+feat_150 = torch.Tensor
 

@@ -5,6 +5,7 @@ ADEChallengeData2016/
 OnlyHotels/
 past_experiments/
 Results/
+hists-old/
 __pycache__/
 .cph_tmpeq2yawo9/
 .cph_tmpeq2yawo9/
@@ -19,6 +20,7 @@ features/
 features2/
 hists/
 *.pckl
+*.png
 pretrained/
 *.gz
 runs/

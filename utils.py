@@ -207,11 +207,12 @@ def parse_devices(input_devices):
     return ret
 
 
-def compute(feat_2048, feat_162, path):
+def compute(feat_162, feat_2048_whole, path):
     cuda0 = torch.device('cuda:0')
+    
     num_classes = 150
     # size of each feat
-    size_2048 = feat_2048.size()
+    size_2048 = feat_2048_whole.size()
     size_162 = feat_162.size()
 
     # features = torch.zeros((size_162[0], size_162[1]))
@@ -234,10 +235,10 @@ def compute(feat_2048, feat_162, path):
     # x = x.permute((0,2,3,1))
     features_coords = torch.zeros((size_2048[2], size_2048[3], 1))
 
-    threshold = 0.05; pix = x.size()[0] * x.size()[1]
-    accepted_classes = [i+1 for i in range(len(accepted_classes)) if (len(np.argwhere(x.numpy() == i+1)) / pix) > threshold]
+    threshold = 0.15; pix = x.size()[0] * x.size()[1]
+    accepted_classes = [i+1 for i in range(len(accepted_classes)) if (len(np.argwhere(feat_162_pred == i+1)) / pix) > threshold]
     # # calculate average for each class in 2048d
-    feat_2048 = feat_2048.permute((0,2,3,1)).type(torch.FloatTensor)
+    feat_2048 = feat_2048_whole.permute((0,2,3,1)).type(torch.FloatTensor)
     img_rep = torch.zeros((len(accepted_classes), 2048),device=cuda0).type(torch.FloatTensor)
     for cl in range(len(accepted_classes)):
         coords = np.argwhere(x.numpy() == accepted_classes[cl])
@@ -245,7 +246,8 @@ def compute(feat_2048, feat_162, path):
             img_rep[cl] = img_rep[cl].add(feat_2048[0][coord[0]][coord[1]])
         img_rep[cl] = torch.div(img_rep[cl], len(coords))
     ft_csv(accepted_classes, path)
-    return img_rep
+    torch.save(img_rep, os.path.join(path, "indiv_features.pt"))
+
 
 def ft_csv(accepted, path):
     names = {}

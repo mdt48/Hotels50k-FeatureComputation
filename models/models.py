@@ -172,7 +172,8 @@ class ResnetDilated(nn.Module):
         self.layer2 = orig_resnet.layer2
         self.layer3 = orig_resnet.layer3
         self.layer4 = orig_resnet.layer4
-        # self.fc = orig_resnet.fc
+        self.fc = orig_resnet.fc
+        self.AvgPool = nn.AdaptiveAvgPool2d((1,1))
 
     def _nostride_dilate(self, m, dilate):
         classname = m.__class__.__name__
@@ -203,9 +204,11 @@ class ResnetDilated(nn.Module):
         x = self.layer4(x); conv_out.append(x);
 
         # [1, 2048, m, n]
+        output = self.AvgPool(x)
+        output = torch.flatten(output, 1)
         # torch.save(x, features.path+"/2048-features.pt")
-        features.feat_2048 = x
-
+        features.feat_2048 = output
+        features.feat_2048_whole = x
         if return_feature_maps:
             return conv_out
         return [x]
@@ -216,7 +219,7 @@ class PPM(nn.Module):
                  use_softmax=False, pool_scales=(1, 2, 3, 6)):
         super(PPM, self).__init__()
         self.use_softmax = use_softmax
-
+        self.AvgPool = nn.AdaptiveAvgPool2d((1,1))
         self.ppm = []
         for scale in pool_scales:
             self.ppm.append(nn.Sequential(
@@ -235,6 +238,7 @@ class PPM(nn.Module):
             nn.Dropout2d(0.1),
             nn.Conv2d(512, 36, kernel_size=1)
         )
+        
 
     def forward(self, conv_out, segSize=None):
         conv5 = conv_out[-1]
@@ -265,7 +269,7 @@ class PPMDeepsup(nn.Module):
                  use_softmax=False, pool_scales=(1, 2, 3, 6)):
         super(PPMDeepsup, self).__init__()
         self.use_softmax = use_softmax
-
+        self.AvgPool = nn.AdaptiveAvgPool2d((1,1))
         self.ppm = []
         for scale in pool_scales:
             self.ppm.append(nn.Sequential(
@@ -311,8 +315,8 @@ class PPMDeepsup(nn.Module):
             
             # x = [1,162,full height, full width]
             # torch.save(x, features.path+"/162-features.pt")
-            features.feat_162 = x
-
+            features.feat_150 = x
+            
             return x
 
         # deep sup
