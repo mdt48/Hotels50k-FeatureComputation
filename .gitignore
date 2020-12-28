@@ -17,6 +17,7 @@ ckpt/
 hotels-resnet50dilated-ppm_deepsup/
 .vscode/
 features/
+test_data/
 features2/
 hists/
 *.pckl
