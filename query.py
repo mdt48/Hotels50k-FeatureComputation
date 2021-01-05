@@ -18,6 +18,8 @@ from PIL import Image
 from tqdm import tqdm
 from config import cfg
 import features, random
+from Query import SingleIndexQuery, MultiIndexQuery, QueryBuilder
+
 
 
 # colors = loadmat('data/color150.mat')['colors']
@@ -94,21 +96,6 @@ def test(segmentation_module, loader, gpu):
                    batch_data['img_ori'].shape[1])
         img_resized_list = batch_data['img_data']
 
-        import os
-        chain = batch_data['info'].split("/")[7]
-        h_id = batch_data['info'].split("/")[8]
-        img = batch_data['info'].split("/")[-1].split(".")[0]
-        
-        ty = batch_data['info'].split("/")[-2]
-
-        path = os.path.join("data/index", chain, h_id, img)
-        if not os.path.exists(path):
-            os.makedirs(path)
-
-        # print(path)
-        features.path = path;
-        if not os.path.exists(path):
-            os.makedirs(path)
 
         with torch.no_grad():
             scores = torch.zeros(1, cfg.DATASET.num_class, segSize[0], segSize[1])
@@ -127,10 +114,10 @@ def test(segmentation_module, loader, gpu):
 
             _, pred = torch.max(scores, dim=1)
             pred = as_numpy(pred.squeeze(0).cpu())
-        # torch.save(features.feat_2048, os.path.join(features.path, "fts.pt"))
-        a = compute(features.feat_150, features.feat_2048_whole, features.path)
-        # torch.save(a, features.path + "/fts.pt")
-        torch.save(features.feat_2048, features.path + "/fts.pt")
+        # # torch.save(features.feat_2048, os.path.join(features.path, "fts.pt"))
+        # a = compute(features.feat_150, features.feat_2048_whole, features.path)
+        # # torch.save(a, features.path + "/fts.pt")
+        # torch.save(features.feat_2048, features.path + "/fts.pt")
 
         # visualization
  
@@ -177,7 +164,7 @@ def main(cfg, gpu):
 
     # Main loop
     test(segmentation_module, loader_test, gpu)
-
+    
     print('Inference done!')
 
 
@@ -192,7 +179,7 @@ if __name__ == '__main__':
         "--imgs",
         required=True,
         type=str,
-        help="an image paths, or a directory name"
+        help="an image paths, or a directory name for images to be queried"
     )
     parser.add_argument(
         "--cfg",
@@ -207,6 +194,16 @@ if __name__ == '__main__':
         type=int,
         help="gpu id for evaluation"
     )
+
+    parser.add_argument('--index', type=str,
+                    help='Path to folder from which to build Index', default="/pless_nfs/home/mdt_/Hotels50-FeatureComputation/data/index")
+
+    parser.add_argument('--method', type=str,
+                    help='Path to folder from which to build Index', default="1")
+    parser.add_argument('--testing', type=str,
+                    help='Run Analysis?', default=None)    
+    parser.add_argument('--SorM', type=str,
+                    help='Run Analysis?', default=None)                                  
     parser.add_argument(
         "opts",
         help="Modify config options using the command-line",
@@ -214,51 +211,62 @@ if __name__ == '__main__':
         nargs=argparse.REMAINDER,
     )
     args = parser.parse_args()
+    if args.testing:
+        args.imgs = "data/imgs/test_indexing/"
+        args.index = "/pless_nfs/home/mdt_/Hotels50-FeatureComputation/data/index"
 
-    cfg.merge_from_file(args.cfg)
-    cfg.merge_from_list(args.opts)
-    # cfg.freeze()
-
-    logger = setup_logger(distributed_rank=0)   # TODO
-    logger.info("Loaded configuration file {}".format(args.cfg))
-    logger.info("Running with config:\n{}".format(cfg))
-
-    cfg.MODEL.arch_encoder = cfg.MODEL.arch_encoder.lower()
-    cfg.MODEL.arch_decoder = cfg.MODEL.arch_decoder.lower()
-
-    # absolute paths of model weights
-    cfg.MODEL.weights_encoder = os.path.join(
-        cfg.DIR, 'encoder_' + cfg.TEST.checkpoint)
-    cfg.MODEL.weights_decoder = os.path.join(
-        cfg.DIR, 'decoder_' + cfg.TEST.checkpoint)
-
-    assert os.path.exists(cfg.MODEL.weights_encoder) and \
-        os.path.exists(cfg.MODEL.weights_decoder), "checkpoint does not exitst!"
-
-    # generate testing image list
-    # print("IMAGES:" + args.imgs)
-    # if os.path.isdir(args.imgs[0]):
-    #     print("images[0]" + args.imgs)
-    #     imgs = find_recursive(args.imgs)
-    # else:
-    #     imgs = [args.imgs]
-
+    # new image that must be segmented
+    new_img = 0
     if os.path.isfile(args.imgs):
-        if args.imgs.endswith(".pckl"):
-            with open(args.imgs, "rb") as pckl:
-                imgs = pickle.load(pckl)
+        new_img = 1
+        cfg.merge_from_file(args.cfg)
+        cfg.merge_from_list(args.opts)
+        # cfg.freeze()
+
+        logger = setup_logger(distributed_rank=0)   # TODO
+        logger.info("Loaded configuration file {}".format(args.cfg))
+        logger.info("Running with config:\n{}".format(cfg))
+
+        cfg.MODEL.arch_encoder = cfg.MODEL.arch_encoder.lower()
+        cfg.MODEL.arch_decoder = cfg.MODEL.arch_decoder.lower()
+
+        # absolute paths of model weights
+        cfg.MODEL.weights_encoder = os.path.join(
+            cfg.DIR, 'encoder_' + cfg.TEST.checkpoint)
+        cfg.MODEL.weights_decoder = os.path.join(
+            cfg.DIR, 'decoder_' + cfg.TEST.checkpoint)
+
+        assert os.path.exists(cfg.MODEL.weights_encoder) and \
+            os.path.exists(cfg.MODEL.weights_decoder), "checkpoint does not exitst!"
+
+        # generate testing image list
+        # print("IMAGES:" + args.imgs)
+        # if os.path.isdir(args.imgs[0]):
+        #     print("images[0]" + args.imgs)
+        #     imgs = find_recursive(args.imgs)
+        # else:
+        #     imgs = [args.imgs]
+
+        if os.path.isfile(args.imgs):
+            if args.imgs.endswith(".pckl"):
+                with open(args.imgs, "rb") as pckl:
+                    imgs = pickle.load(pckl)
+            else:
+                imgs = [args.imgs]
         else:
-            imgs = [args.imgs]
-    else:
-        imgs = find_recursive(args.imgs)
+            imgs = find_recursive(args.imgs)
 
-    imgs = sample(imgs, 200000)
+        # imgs = sample(imgs, 200000)
 
-    assert len(imgs), "imgs should be a path to image (.jpg) or directory."
+        assert len(imgs), "imgs should be a path to image (.jpg) or directory."
 
-    cfg.list_test = [{'fpath_img': x} for x in imgs]
+        cfg.list_test = [{'fpath_img': x} for x in imgs]
 
-    if not os.path.isdir(cfg.TEST.result):
-        os.makedirs(cfg.TEST.result)
+        if not os.path.isdir(cfg.TEST.result):
+            os.makedirs(cfg.TEST.result)
 
-    main(cfg, args.gpu)
+        main(cfg, args.gpu)
+        # Search(args, new_img=1)
+    
+    Query = QueryBuilder(args, new_img).build()
+    Query.build_and_search()
