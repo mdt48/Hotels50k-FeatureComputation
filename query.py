@@ -177,9 +177,10 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--imgs",
-        required=True,
+        required=False,
         type=str,
-        help="an image paths, or a directory name for images to be queried"
+        help="an image paths, or a directory name for images to be queried",
+        
     )
     parser.add_argument(
         "--cfg",

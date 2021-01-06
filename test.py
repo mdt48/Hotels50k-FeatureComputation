@@ -95,13 +95,13 @@ def test(segmentation_module, loader, gpu):
         img_resized_list = batch_data['img_data']
 
         import os
-        chain = batch_data['info'].split("/")[7]
-        h_id = batch_data['info'].split("/")[8]
+        chain = batch_data['info'].split("/")[8]
+        h_id = batch_data['info'].split("/")[9]
         img = batch_data['info'].split("/")[-1].split(".")[0]
         
         ty = batch_data['info'].split("/")[-2]
 
-        path = os.path.join("data/index", chain, h_id, img)
+        path = os.path.join("data/test", chain, h_id, img)
         if not os.path.exists(path):
             os.makedirs(path)
 
@@ -252,7 +252,7 @@ if __name__ == '__main__':
     else:
         imgs = find_recursive(args.imgs)
 
-    imgs = sample(imgs, 200000)
+    # imgs = sample(imgs, 200000)
 
     assert len(imgs), "imgs should be a path to image (.jpg) or directory."
 

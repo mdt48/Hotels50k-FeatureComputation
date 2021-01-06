@@ -40,6 +40,7 @@ class SingleIndexQuery:
 
         # See if the index has already been created!
         self.__check_index_exists()
+        print(len(self.index_imgs))
         # self.index_imgs = self.__get_files(self.index_path)
         # self.index = self.build_index(self.index_method)
         self.query = self.__build_query()
@@ -62,15 +63,13 @@ class SingleIndexQuery:
         index = None
         if type == 0:
             index = faiss.IndexFlatL2(d)
-            res = faiss.StandardGpuResources()
-            index = faiss.index_cpu_to_gpu(res, 0, index)
+            
         elif type == 1:
             faiss.normalize_L2(index_vectors)
 
             index = faiss.index_factory(d, "Flat", faiss.METRIC_INNER_PRODUCT)
             # index = faiss.IndexFlatIP(d)
-            res = faiss.StandardGpuResources()
-            index = faiss.index_cpu_to_gpu(res, 0, index)
+            
 
         elif type == 2:
             index = faiss.IndexHNSWFlat(d, 32)
@@ -111,6 +110,7 @@ class SingleIndexQuery:
                 dst[idx] = vec[0]
     
     def __search(self):
+        print("Searching")
         k_chain = 5
         k_instance = 100 
 
@@ -149,6 +149,7 @@ class SingleIndexQuery:
     def __check_index_exists(self):
         self.__img_list_serialization()
 
+        print("Getting Index")
         if self.mode == "s":
             if os.path.exists("data/indexes/SingleIndex.fss"):
                 self.__index_deserialization()
@@ -168,6 +169,8 @@ class SingleIndexQuery:
             faiss.write_index(self.index, "data/indexes/SingleIndex.fss")
         else:
             faiss.write_index(self.index, "data/indexes/MultiIndex.fss")
+        res = faiss.StandardGpuResources()
+        self.index = faiss.index_cpu_to_gpu(res, 0, self.index)
 
     def __index_deserialization(self):
         if self.mode == "s":
@@ -183,6 +186,7 @@ class SingleIndexQuery:
                 self.index_imgs = pickle.load(imgs)
         else:
             self.index_imgs = self.__get_files(self.index_path)
+            print("Got File Names: {}".format(len(self.index_imgs)))
             with open("data/indexes/img_list.pckl", "wb") as imgs:
                 pickle.dump(self.index_imgs, imgs)
 
