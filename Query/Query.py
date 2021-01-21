@@ -3,6 +3,7 @@ import faiss
 import torch
 import os
 import csv
+import pandas as pd
 from tqdm import tqdm
 import numpy as np
 from glob import glob
@@ -36,16 +37,16 @@ class SingleIndexQuery:
         self.__search()
 
     def __build(self):
-        self.query_imgs = self.__get_files(self.query_path)
+        self.query_imgs = self._get_files(self.query_path)
 
         # See if the index has already been created!
-        self.__check_index_exists()
+        self._check_index_exists()
         print(len(self.index_imgs))
         # self.index_imgs = self.__get_files(self.index_path)
         # self.index = self.build_index(self.index_method)
         self.query = self.__build_query()
 
-    def __get_files(self, path):
+    def _get_files(self, path):
         if os.path.isfile(path):
             return [path]
         return sorted([f for f in glob(path + "/**/fts.pt", recursive=True)  if "-1" not in f], key=lambda x: x.split("/")[1])
@@ -58,7 +59,7 @@ class SingleIndexQuery:
 
         index_vectors = np.ones((nb, d),dtype="float32")
         
-        self.__add_vectors(self.index_imgs, index_vectors, 0, use_index)
+        self._add_vectors(self.index_imgs, index_vectors, 0, use_index)
 
         index = None
         if type == 0:
@@ -92,14 +93,14 @@ class SingleIndexQuery:
             q_vectors = features.feat_2048
 
         query = np.ones((nb, 2048),dtype="float32")
-        self.__add_vectors(q_vectors, query, 0)
+        self._add_vectors(q_vectors, query, 0)
         if self.index_method == 1:
             faiss.normalize_L2(query)
 
         # query[0] = features.feat_2048.cpu().numpy().astype('float32')
         return query
 
-    def __add_vectors(self, src, dst, norm, use_index=None):
+    def _add_vectors(self, src, dst, norm, use_index=None):
         for idx, v in enumerate(src):
             if use_index:
                 vec = torch.load(v[0], map_location='cuda:0').cpu().numpy().astype('float32')
@@ -146,31 +147,33 @@ class SingleIndexQuery:
             for i in I_ch[0]:
                 print(self.index_imgs[i])
     
-    def __check_index_exists(self):
+    def _check_index_exists(self):
         self.__img_list_serialization()
 
         print("Getting Index")
         if self.mode == "s":
             if os.path.exists("data/indexes/SingleIndex.fss"):
                 self.__index_deserialization()
-                return             
+            self.index = self.build_index(self.index_method)
+     
         elif self.mode == "m":
             if os.path.exists("data/indexes/MultiIndex.fss"):
                 self.__index_deserialization()
-                return 
+            self.index = self._build_multi_index()
 
-        self.index = self.build_index(self.index_method)
             
         
-        self.__index_serialization()
+        self._index_serialization()
 
-    def __index_serialization(self):
+    def _index_serialization(self):
         if self.mode == "s":
             faiss.write_index(self.index, "data/indexes/SingleIndex.fss")
         else:
-            faiss.write_index(self.index, "data/indexes/MultiIndex.fss")
-        res = faiss.StandardGpuResources()
-        self.index = faiss.index_cpu_to_gpu(res, 0, self.index)
+            # faiss.write_index(self.index, "data/indexes/MultiIndex.fss")
+            pass
+            
+        # res = faiss.StandardGpuResources()
+        # self.index = faiss.index_cpu_to_gpu(res, 0, self.index)
 
     def __index_deserialization(self):
         if self.mode == "s":
@@ -178,7 +181,8 @@ class SingleIndexQuery:
                 # faiss.write_index(self.index, index_file)
             self.index = faiss.read_index("data/indexes/SingleIndex.fss")
         else:
-            self.index = faiss.write_index(self.index, "data/indexes/MultiIndex.fss")
+            # self.index = faiss.write_index(self.index, "data/indexes/MultiIndex.fss")
+            pass
 
     def __img_list_serialization(self):
         if os.path.exists("data/indexes/img_list.pckl"):
@@ -198,16 +202,18 @@ class MultiIndexQuery(SingleIndexQuery):
         self.index_imgs = []
     
     def build_and_search(self):
+        self.query_imgs = self._get_files(self.query_path)
         self.__build_class_dict()
-        self.__build_multi_index()
+        # self.__build_multi_index()
+        self._check_index_exists()
         self.__search()
 
     def __build_class_dict(self):
-        self.class_dict = {i:[] for i in range(1, 151)}
+        self.class_dict = {}
 
         chains = self.__get_subdirs(self.index_path)
 
-        for chain in tqdm(chains[:20], desc="Collecting Vectors"):
+        for chain in tqdm(chains, desc="Collecting Vectors"):
             instance = self.__get_subdirs(chain)
 
             for inst in instance:
@@ -215,16 +221,19 @@ class MultiIndexQuery(SingleIndexQuery):
 
                 for room in rooms:
                     files = self.__get_files(room)
-
+                    if not files:
+                        continue
                     with open(files[0], 'r') as csvfile:
                         reader = csv.reader(csvfile)
                         next(reader)
 
                         for i, row in enumerate(reader):
-                            self.class_dict[int(row[0])].append( (files[1], i) )
+                            if row[1] not in  self.class_dict.keys():
+                                self.class_dict[row[1]] = []
+                            self.class_dict[row[1]].append( (files[1], i) )
 
-    def __build_multi_index(self):
-        self.indicies = {i for i in range(1, 151)}
+    def _build_multi_index(self):
+        self.indicies = {i:None for i in self.class_dict.keys()}
         for cl in tqdm(self.class_dict.keys(), desc="Indexing"):
             if not self.class_dict[cl]:
                 self.class_dict[cl] = None
@@ -233,9 +242,46 @@ class MultiIndexQuery(SingleIndexQuery):
             
             self.index_imgs = self.class_dict[cl]
 
-            self.index = self.build_index(self.index_method, use_index=1)
+            
+            self.indicies[cl] = self.build_index(self.index_method, use_index=1)
         
+    def __search(self):
+        total = len(self.query_imgs)
+        overall = 0
+        for img in self.query_imgs:
+            img = img.replace("fts.pt", "indiv_features.pt")
+            csv = img.replace("indiv_features.pt", "fts.csv")
 
+            with open("data/indexes/img_list.pckl", "rb") as imgs:
+                self.index_imgs = pickle.load(imgs)
+
+            # read in csv
+            csv = pd.read_csv(csv)
+
+            avg = 0
+
+            print("Image: {}".format(img))
+
+            mt = torch.load(img, map_location='cuda:0').cpu().numpy().astype('float32')
+            for row in csv.values:
+                query = np.ones((1, 2048)).astype('float32')
+                query[0] = mt[0]
+                print("\tClass: {}".format(row[1]))
+                D_ch, I_ch = self.indicies[row[1]].search(query, 5)
+                found = 0
+                t = 0
+                for i in I_ch[0]:
+                    print("\t\t" + img.split("/")[3], self.index_imgs[i].split("/")[7])
+                    if img.split("/")[3] == self.index_imgs[i].split("/")[7]:
+                        found += 1
+                
+                t += found / 5
+                overall += found / 5
+                print("\ttop 5 chain: {}\n".format(t))
+        print("top 5 chain: {}".format(overall/total))
+            # iterate through each class
+
+            # do k neearest
     def __get_subdirs(self, p):
         return glob(p + "/*/")
 
