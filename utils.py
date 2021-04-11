@@ -8,12 +8,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import numpy as np
-from scipy.interpolate import interp1d
-from glob import glob
 from lib.utils import as_numpy
-import csv
-import pickle
-
+import io
 def setup_logger(distributed_rank=0, filename="log.txt"):
     logger = logging.getLogger("Logger")
     logger.setLevel(logging.DEBUG)
@@ -207,59 +203,3 @@ def parse_devices(input_devices):
     return ret
 
 
-def compute(feat_162, feat_2048_whole, path):
-    cuda0 = torch.device('cuda:0')
-    
-    num_classes = 150
-    # size of each feat
-    size_2048 = feat_2048_whole.size()
-    size_162 = feat_162.size()
-
-    # features = torch.zeros((size_162[0], size_162[1]))
-
-    # most probable class at each pixel
-    _, feat_162_pred = torch.max(feat_162, dim=1)
-    feat_162_pred = as_numpy(feat_162_pred.squeeze(0))
-
-    accepted_classes = [0 for i in range(num_classes)]
-    # for i in range(len(feat_162_pred)):
-    #     for j in range(len(feat_162_pred[0])):
-    #         accepted_classes[feat_162_pred[i][j]] += 1
-
-    #get features with more than 10% of pixels
-    
-
-    x = nn.functional.interpolate(torch.from_numpy(feat_162_pred).unsqueeze(0).unsqueeze(0).type(torch.FloatTensor), size=(size_2048[2], size_2048[3]), mode='bilinear', align_corners=False)
-    x = x.squeeze().squeeze().type(torch.int64)
-    # # get corresponding coordinates
-    # x = x.permute((0,2,3,1))
-    features_coords = torch.zeros((size_2048[2], size_2048[3], 1))
-
-    threshold = 0.15; pix = x.size()[0] * x.size()[1]
-    accepted_classes = [i+1 for i in range(len(accepted_classes)) if (len(np.argwhere(feat_162_pred == i+1)) / pix) > threshold]
-    # # calculate average for each class in 2048d
-    feat_2048 = feat_2048_whole.permute((0,2,3,1)).type(torch.FloatTensor)
-    img_rep = torch.zeros((len(accepted_classes), 2048),device=cuda0).type(torch.FloatTensor)
-    for cl in range(len(accepted_classes)):
-        coords = np.argwhere(x.numpy() == accepted_classes[cl])
-        for coord in coords:
-            img_rep[cl] = img_rep[cl].add(feat_2048[0][coord[0]][coord[1]])
-        img_rep[cl] = torch.div(img_rep[cl], len(coords))
-    ft_csv(accepted_classes, path)
-    torch.save(img_rep, os.path.join(path, "indiv_features.pt"))
-
-
-def ft_csv(accepted, path):
-    names = {}
-    with open('/pless_nfs/home/mdt_/semantic-segmentation-pytorch/data/object150_info.csv') as f:
-        reader = csv.reader(f)
-        next(reader)
-        for row in reader:
-            names[int(row[0])] = row[5].split(";")[0]
-    
-    with open(os.path.join(path, "fts.csv"), 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile, delimiter=",")
-        writer.writerow(["ID", "NAME"])
-        for cl in accepted:
-            writer.writerow([cl+1, names[cl+1]])
-            

@@ -1,8 +1,8 @@
 DATASET:
-  root_dataset: ""
-  list_train: "./data/training_hotels.odgt"
-  list_val: "./data/validation_hotels.odgt"
-  num_class: 38
+  root_dataset: "./data/"
+  list_train: "data/27_train.odgt"
+  list_val: "data/27_val.odgt"
+  num_class: 37
   imgSizes: (300, 375, 450, 525, 600)
   imgMaxSize: 1000
   padding_constant: 8
@@ -16,9 +16,9 @@ MODEL:
 
 TRAIN:
   batch_size_per_gpu: 2
-  num_epoch: 20
+  num_epoch: 10
   start_epoch: 0
-  epoch_iters: 5000
+  epoch_iters: 1200
   optim: "SGD"
   lr_encoder: 0.02
   lr_decoder: 0.02
@@ -33,10 +33,10 @@ TRAIN:
 
 VAL:
   visualize: False
-  checkpoint: "epoch_20.pth"
+  checkpoint: "epoch_10.pth"
 
 TEST:
   checkpoint: "epoch_20.pth"
-  result: "./Results/Resnet50"
+  result: "./"
 
-DIR: "ckpt/hotels-resnet50dilated-ppm_deepsup"
+DIR: "/pless_nfs/home/mdt_/semantic-segmentation-pytorch/ckpt/exp4"

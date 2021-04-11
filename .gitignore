@@ -5,7 +5,6 @@ ADEChallengeData2016/
 OnlyHotels/
 past_experiments/
 Results/
-hists-old/
 __pycache__/
 .cph_tmpeq2yawo9/
 .cph_tmpeq2yawo9/
@@ -32,3 +31,10 @@ cph_tmpeq2yawo9/
 data/index/
 data/imgs/test_indexing/
 data/
+*.zip
+.prettierrc.json
+config/current_experiments
+config/defaults
+config/failed
+config/experiments/current_experiments
+config/transfer_learning

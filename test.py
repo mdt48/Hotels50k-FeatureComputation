@@ -11,7 +11,7 @@ import csv
 # Our data
 from dataset import TestDataset
 from models import ModelBuilder, SegmentationModule
-from utils import colorEncode, find_recursive, setup_logger, compute
+from utils import colorEncode, find_recursive, setup_logger
 from lib.nn import user_scattered_collate, async_copy_to
 from lib.utils import as_numpy
 from PIL import Image
@@ -94,21 +94,7 @@ def test(segmentation_module, loader, gpu):
                    batch_data['img_ori'].shape[1])
         img_resized_list = batch_data['img_data']
 
-        import os
-        chain = batch_data['info'].split("/")[8]
-        h_id = batch_data['info'].split("/")[9]
-        img = batch_data['info'].split("/")[-1].split(".")[0]
-        
-        ty = batch_data['info'].split("/")[-2]
-
-        path = os.path.join("data/test", chain, h_id, img)
-        if not os.path.exists(path):
-            os.makedirs(path)
-
-        # print(path)
-        features.path = path;
-        if not os.path.exists(path):
-            os.makedirs(path)
+        get_image_path(batch_data)
 
         with torch.no_grad():
             scores = torch.zeros(1, cfg.DATASET.num_class, segSize[0], segSize[1])
@@ -127,20 +113,26 @@ def test(segmentation_module, loader, gpu):
 
             _, pred = torch.max(scores, dim=1)
             pred = as_numpy(pred.squeeze(0).cpu())
-        # torch.save(features.feat_2048, os.path.join(features.path, "fts.pt"))
-        a = compute(features.feat_150, features.feat_2048_whole, features.path)
-        # torch.save(a, features.path + "/fts.pt")
-        torch.save(features.feat_2048, features.path + "/fts.pt")
+        
+        features.compute_image_representation(features.feat_150, features.feat_2048_whole, features.path)
 
-        # visualization
- 
-        # visualize_result(
-        #     (batch_data['img_ori'], batch_data['info']),
-        #     pred,
-        #     cfg
-        # )
+def get_image_path(batch_data):
+    import os
+    chain = batch_data['info'].split("/")[-4]
+    h_id = batch_data['info'].split("/")[-3]
+    source = batch_data['info'].split("/")[-2]
+    img = batch_data['info'].split("/")[-1].split(".")[0]
 
-        # pbar.update(1)
+
+    path = os.path.join("data/train", chain, h_id, source, img)
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    # print(path)
+    features.path = path;
+    if not os.path.exists(path):
+        os.makedirs(path)
+        
 
 
 def main(cfg, gpu):
@@ -235,18 +227,10 @@ if __name__ == '__main__':
     assert os.path.exists(cfg.MODEL.weights_encoder) and \
         os.path.exists(cfg.MODEL.weights_decoder), "checkpoint does not exitst!"
 
-    # generate testing image list
-    # print("IMAGES:" + args.imgs)
-    # if os.path.isdir(args.imgs[0]):
-    #     print("images[0]" + args.imgs)
-    #     imgs = find_recursive(args.imgs)
-    # else:
-    #     imgs = [args.imgs]
-
     if os.path.isfile(args.imgs):
         if args.imgs.endswith(".pckl"):
             with open(args.imgs, "rb") as pckl:
-                imgs = pickle.load(pckl)
+                imgs = pickle.load(pckl)[:10000]
         else:
             imgs = [args.imgs]
     else:
