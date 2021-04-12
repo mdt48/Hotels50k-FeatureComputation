@@ -14,37 +14,11 @@ from models import ModelBuilder, SegmentationModule
 from utils import colorEncode, find_recursive, setup_logger
 from lib.nn import user_scattered_collate, async_copy_to
 from lib.utils import as_numpy
-from PIL import Image
+import pickle
 from tqdm import tqdm
 from config import cfg
 import features, random
-
-
-# colors = loadmat('data/color150.mat')['colors']
-# names = {}
-# with open('data/object150_info.csv') as f:
-#     reader = csv.reader(f)
-#     next(reader)
-#     for row in reader:
-#         names[int(row[0])] = row[5].split(";")[0]
-# colors = []
-# names = {}
-# from extras import colors
-# colors_names = colors.getColors()
-# for idx, pair in enumerate(colors_names):
-#     colors.append(pair[0])
-#     names[idx+2] = pair[1]
-
-import pickle
-# col = getColors()
-colors = []
-names = {}
-with open("Colors/colors_Hotels_and_ADE_162.pckl", "rb") as p:
-    data = pickle.load(p)
-    for idx, d in enumerate(data):
-        # colors.append(np.array(d[0], np.uint8))
-        names[idx+1] = d
-    colors = np.array(data, np.uint8)
+from Query import Index, Search
 
 def sample(file_list, N):
     sample = []
@@ -58,32 +32,8 @@ def sample(file_list, N):
 
     return sample
 
-def visualize_result(data, pred, cfg):
-    (img, info) = data
 
-    # print predictions in descending order
-    pred = np.int32(pred)
-    pixs = pred.size
-    uniques, counts = np.unique(pred, return_counts=True)
-    print("Predictions in [{}]:".format(info))
-    for idx in np.argsort(counts)[::-1]:
-        name = names[uniques[idx] + 1]
-        ratio = counts[idx] / pixs * 100
-        if ratio > 0.1:
-            print("  {}: {:.2f}%".format(name, ratio))
-
-    # colorize prediction
-    pred_color = colorEncode(pred, colors).astype(np.uint8)
-
-    # aggregate images and save
-    im_vis = np.concatenate((img, pred_color), axis=1)
-
-    img_name = info.split('/')[-1]
-    Image.fromarray(im_vis).save(
-        os.path.join(features.path, img_name.replace('.jpg', '.png')))
-
-
-def test(segmentation_module, loader, gpu):
+def test(segmentation_module, loader, gpu, query):
     segmentation_module.eval()
 
     # pbar = tqdm(total=len(loader))
@@ -114,7 +64,13 @@ def test(segmentation_module, loader, gpu):
             _, pred = torch.max(scores, dim=1)
             pred = as_numpy(pred.squeeze(0).cpu())
         
-        features.compute_image_representation(features.feat_150, features.feat_2048_whole, features.path)
+        img_rep, acc_classes = features.compute_image_representation(features.feat_150, features.feat_2048_whole, features.path, False if query else True)
+
+        #if query call knn
+        if query:
+            knn = Search.kNN()
+            print(knn.search(img_rep, acc_classes))
+            # knn.search(img_rep, acc_classes)
 
 def get_image_path(batch_data):
     import os
@@ -135,7 +91,7 @@ def get_image_path(batch_data):
         
 
 
-def main(cfg, gpu):
+def main(cfg, gpu, query):
     torch.cuda.set_device(gpu)
 
     # Network Builders
@@ -168,7 +124,7 @@ def main(cfg, gpu):
     segmentation_module.cuda()
 
     # Main loop
-    test(segmentation_module, loader_test, gpu)
+    test(segmentation_module, loader_test, gpu, query)
 
     print('Inference done!')
 
@@ -188,10 +144,16 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--cfg",
-        default="config/ade20k-resnet50dilated-ppm_deepsup.yaml",
+        default="config/experiments/exp1.yaml",
         metavar="FILE",
         help="path to config file",
         type=str,
+    )
+    parser.add_argument(
+        "--query",
+        help="Modify config options using the command-line",
+        default=None,
+        nargs=argparse.REMAINDER,
     )
     parser.add_argument(
         "--gpu",
@@ -205,6 +167,8 @@ if __name__ == '__main__':
         default=None,
         nargs=argparse.REMAINDER,
     )
+
+    
     args = parser.parse_args()
 
     cfg.merge_from_file(args.cfg)
@@ -230,14 +194,14 @@ if __name__ == '__main__':
     if os.path.isfile(args.imgs):
         if args.imgs.endswith(".pckl"):
             with open(args.imgs, "rb") as pckl:
-                imgs = pickle.load(pckl)[:10000]
+                imgs = pickle.load(pckl)[10000:20000]
         else:
             imgs = [args.imgs]
     else:
         imgs = find_recursive(args.imgs)
 
     # imgs = sample(imgs, 200000)
-
+    features.gpu = args.gpu
     assert len(imgs), "imgs should be a path to image (.jpg) or directory."
 
     cfg.list_test = [{'fpath_img': x} for x in imgs]
@@ -245,4 +209,4 @@ if __name__ == '__main__':
     if not os.path.isdir(cfg.TEST.result):
         os.makedirs(cfg.TEST.result)
 
-    main(cfg, args.gpu)
+    main(cfg, args.gpu, args.query)

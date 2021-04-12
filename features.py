@@ -7,14 +7,15 @@ from glob import glob
 from lib.utils import as_numpy
 import csv
 
-feat_2048 = torch.zeros(size=(1, 2048), device=torch.device('cuda:1'))
-feat_2048_whole = torch.zeros(size=(1, 2048, 38, 50), device=torch.device('cuda:1'))
+gpu = 0
+feat_2048 = torch.zeros(size=(1, 2048), device=torch.device('cuda:{}'.format(gpu)))
+feat_2048_whole = torch.zeros(size=(1, 2048, 38, 50), device=torch.device('cuda:{}'.format(gpu)))
 feat_150 = torch.Tensor
 
 
 
-def compute_image_representation(feat_150, feat_2048_whole, path):
-    cuda0 = torch.device('cuda:1')
+def compute_image_representation(feat_150, feat_2048_whole, path, save=True):
+    cuda0 = torch.device('cuda:{}'.format(gpu))
     
     num_classes = 150
     # size of each feat
@@ -47,8 +48,11 @@ def compute_image_representation(feat_150, feat_2048_whole, path):
         for coord in coords:
             img_rep[idx] = img_rep[idx].add(feat_2048[0][coord[0]][coord[1]])
         img_rep[idx] = torch.div(img_rep[idx], len(coords))
-    torch.save(img_rep, os.path.join(path, "indiv_features1.pt"))
-    to_csv(accepted_classes, path)
+    if save:
+        torch.save(img_rep, os.path.join(path, "indiv_features1.pt"))
+        to_csv(accepted_classes, path)
+    else:
+        return img_rep, accepted_classes
 
 def to_csv(accepted_classes, img_path):
     """
