@@ -51,6 +51,7 @@ def compute_image_representation(feat_150, feat_2048_whole, path, save=True):
     if save:
         torch.save(img_rep, os.path.join(path, "indiv_features1.pt"))
         to_csv(accepted_classes, path)
+        return img_rep, accepted_classes
     else:
         return img_rep, accepted_classes
 
@@ -58,7 +59,7 @@ def to_csv(accepted_classes, img_path):
     """
     Write new row in form of index, class, path
     """
-    with open('data/train/features.csv', 'a+', newline='') as csvfile:
+    with open('data/test/features.csv', 'a+', newline='') as csvfile:
         writer = csv.writer(csvfile, delimiter=',',
                                     quotechar='|', quoting=csv.QUOTE_MINIMAL)
 

@@ -45,7 +45,7 @@ def test(segmentation_module, loader, gpu, query):
         img_resized_list = batch_data['img_data']
 
         get_image_path(batch_data)
-
+        
         with torch.no_grad():
             scores = torch.zeros(1, cfg.DATASET.num_class, segSize[0], segSize[1])
             scores = async_copy_to(scores, gpu)
@@ -67,10 +67,10 @@ def test(segmentation_module, loader, gpu, query):
         img_rep, acc_classes = features.compute_image_representation(features.feat_150, features.feat_2048_whole, features.path, False if query else True)
 
         #if query call knn
-        if query:
-            knn = Search.kNN()
-            print(knn.search(img_rep, acc_classes))
-            # knn.search(img_rep, acc_classes)
+        # if query:
+        #     knn = Search.kNN()
+        #     print(knn.search(img_rep, acc_classes))
+        #     # knn.search(img_rep, acc_classes)
 
 def get_image_path(batch_data):
     import os
@@ -80,7 +80,7 @@ def get_image_path(batch_data):
     img = batch_data['info'].split("/")[-1].split(".")[0]
 
 
-    path = os.path.join("data/train", chain, h_id, source, img)
+    path = os.path.join("data/test", chain, h_id, source, img)
     if not os.path.exists(path):
         os.makedirs(path)
 
@@ -191,10 +191,11 @@ if __name__ == '__main__':
     assert os.path.exists(cfg.MODEL.weights_encoder) and \
         os.path.exists(cfg.MODEL.weights_decoder), "checkpoint does not exitst!"
 
+    print(args.imgs)
     if os.path.isfile(args.imgs):
         if args.imgs.endswith(".pckl"):
             with open(args.imgs, "rb") as pckl:
-                imgs = pickle.load(pckl)[10000:20000]
+                imgs = pickle.load(pckl)
         else:
             imgs = [args.imgs]
     else:
