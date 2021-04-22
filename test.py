@@ -70,7 +70,7 @@ def test(segmentation_module, loader, gpu, query):
         # if query:
         #     knn = Search.kNN()
         #     print(knn.search(img_rep, acc_classes))
-        #     # knn.search(img_rep, acc_classes)
+        #     # knn.search(img_rep.tolist(), acc_classes)
 
 def get_image_path(batch_data):
     import os
