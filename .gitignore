@@ -38,3 +38,4 @@ config/defaults
 config/failed
 config/experiments/current_experiments
 config/transfer_learning
+test_nt.tar/

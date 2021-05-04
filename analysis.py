@@ -1,125 +1,128 @@
-import multiprocessing
-import os
 import pickle
-from glob import glob
-import torch
-import itertools
 import random
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import torch
+import torch.nn as nn
+from sklearn.neighbors import KernelDensity, NearestNeighbors
 from tqdm import tqdm
-import plotly.figure_factory as ff
-from multiprocessing import Pool
+
+import warnings
+warnings.filterwarnings('ignore')
+random.seed(42)
+
+rng = np.random.default_rng()
+cos = nn.CosineSimilarity(dim=0, eps=1e-6)
+
+ade = pd.read_csv("data/features_150.csv")
+ade_classes = {row["Idx"]:row["Name"].replace(";", "-") for idx, row in ade.iterrows()}
+
+def get_classes(csv):
+    unfilter_classes = list(csv["Class"].unique())[1:]
+    classes = set()
+    for cl in unfilter_classes:
+        if "data" in cl: continue
+        classes.add(cl)
+    return list(classes)
+
+def calc_distribution(same, diff):
+    kde_same = KernelDensity(kernel="gaussian",bandwidth=0.75).fit(np.array(same).reshape(-1, 1))
+    kde_diff = KernelDensity(kernel="gaussian",bandwidth=0.75).fit(np.array(diff).reshape(-1, 1))
+    return kde_same, kde_diff
+
+def make_plot(path, same, diff,title, feature=None):
+    Path(path).mkdir(parents=True, exist_ok=True)
+    
+
+    
+    fig, ax = plt.subplots()
+    names = ["Same", "Diff"]
+    for idx, a in enumerate([same, diff]):
+        sns.distplot(a, ax=ax, kde=True, hist=False, rug=False, label=names[idx])
+    ax.set_xlim([0, 1])
+    ax.set_ylim([0, 12.5])
+    
+
+    fig.add_axes(ax)
+    plt.legend()
+    fig.suptitle(title, fontsize=10)
+    plt.savefig(path+"same-diff-dist.png")
+    
+    plt.close('all')
+
+def load_pckl(path):
+    with open(path, "rb") as f: ret = pickle.load(f)
+
+    return ret
+
+    
+def my_distance(x, y, **kwargs):
+    # print(kwargs)
+    cos = nn.CosineSimilarity(dim=0, eps=1e-6)
+
+    return 1- float( cos(torch.tensor(x), torch.tensor(y)) )
+
+def analysis(mode, cl, closest_same_class, closest_diff_class):
+    path = "data/figures/{}/closest_same_closest_diff/{}/".format(mode+"-take-2",ade_classes[int(cl)])
+    title = "{} - Same-Diff Class".format(ade_classes[int(cl)])
+    make_plot(path, closest_same_class, closest_diff_class, title)
+
+    kde_same, kde_diff = calc_distribution(closest_same_class, closest_diff_class)
+
+    with open(path + "distribution.pckl", "wb") as f:
+        pickle.dump([kde_same, kde_diff], f)
+
+def closest(csv, cl, mode, same, diff):
+    if len(same) == 0: return
+    closest_same_class = []
+    closest_diff_class = []
+
+    sample_length = min( 750, len(same) )
+
+    same_class = rng.choice(same, sample_length, axis=0)
+    # same_class = same
+    
+    
+    for idx, feature in tqdm(enumerate(same_class), total=len(same_class), desc="Closest"):
+        
+        search_index = np.delete(same, idx, 0)
+        if len(search_index) == 0: return
+        knn = NearestNeighbors(algorithm="brute", n_neighbors=1, metric=my_distance)
+        knn.fit(search_index)
+        closest_same_class.append( 1-knn.kneighbors(feature.reshape(1, -1))[0][0][0] )
 
 
-class Analysis:
-    restrictions = [1,74,76,65,41]
-    hotels = {}
-
-    self_sim = []
-    diff_sim = []
-
-    used_chains = []
-
-    def __init__(self, path):
-        chains = glob(path + "/*/")
-        for chain in chains:
-            hotels = sorted(glob(chain + "/*/"), key=self.sorter)
-            self.hotels[chain.split("/")[-2]] = hotels
-        self.device = torch.device('cuda:3')
-            
-    def compute_avg_diff(self):
-        if os.path.exists("vectors/same.pckl"):
-            with open("vectors/same.pckl", "rb") as p1:
-                self.self_sim = pickle.load(p1)
-        else:
-            self.same_hotel_similarity()
-
-            with open("vectors/same.pckl", "wb") as p1:
-                pickle.dump(self.self_sim, p1)
-
-            self.diff_hotel_similarity()
-            self.hists()
-
-            with open("vectors/diff.pckl", "wb") as p2:
-                pickle.dump(self.diff_sim, p2)
-
-
-    def same_hotel_similarity(self):
-        for chain in tqdm(self.hotels, desc="Same Hotel Similarity"):
-
-            for hotel in self.hotels[chain]:
-                hotels_vectors = glob(hotel + "**/fts.pt", recursive=True)
-
-                pairs = itertools.combinations(hotels_vectors, 2)
-                self.pair_cos_distance(pairs, 0)
-            
-    def diff_hotel_similarity(self):
-        n = 5
-        for chain in tqdm(self.hotels, desc="Different Hotel Similarity"):
-            vectors = glob("features/" + chain + "/**/fts.pt", recursive=True)
-
-            other_vectors = []
-            p = multiprocessing.Pool()
-
-            other_vectors = p.map(self.diff_worker, chain, len(self.hotels) // 5)
-
-            p.close()
-            p.join()
-            self.used_chains = []
-            
-            pairs = itertools.product(other_vectors[0], vectors)
-            self.pair_cos_distance(pairs, 1)
-
-    def diff_worker(self, chain):
-        for i, hotel2 in enumerate(self.hotels):
-            if hotel2 == chain or hotel2 in self.used_chains:
-                continue
-            
-            other_vectors = glob("features/" + hotel2 + "/**/fts.pt", recursive=True) 
-            self.used_chains.append(hotel2)
-            return other_vectors
-
-    def get_random_chain(self, current_key):
-        for ch in self.hotels:
-            if ch != current_key and ch not in self.used_chains:
-                self.used_chains.append(ch)
-                return ch
-
-
-    def pair_cos_distance(self, pairs, which):
-        cos = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
-        for pair in pairs:
-            v1 = torch.load(pair[0]).to(self.device); v2 = torch.load(pair[1]).to(self.device)
-            if which == 0:
-                self.self_sim.append(float(cos(v1,v2)))
-            elif which == 1:
-                self.diff_sim.append(float(cos(v1,v2)))
-            else:
-                print("Invalid tpye for cos dis")
-
-    def hists(self):
-        # n = 500
-        # d1 = random.choices(self.self_sim, k=n)
-        # d2 = random.choices(self.diff_sim, k=n)
-        labels = ['Same Hotel', 'Diff Hotel']
-        fig = ff.create_distplot([self.self_sim, self.diff_sim], group_labels=labels, show_hist=False)
-        fig.layout.update({'title': 'Similarities Between Same and Different Hotels'})
-        fig.write_image("combined_hist2.png")
-
-
-        fig = ff.create_distplot([self.self_sim], group_labels=[labels[0]], show_hist=False)
-        fig.layout.update({'title': 'Similarities Between Same Hotels'})
-        fig.write_image("same_hist2.png")
-
-        fig = ff.create_distplot([self.diff_sim], group_labels=[labels[1]], show_hist=False)
-        fig.layout.update({'title': 'Similarities Between Different Hotels'})
-        fig.write_image("diff_hist2.png")
-
-    def sorter(self, x):
-        return int(x.split("/")[-2])
+        
+        closest_diff_class.append( 1 - diff.kneighbors(feature.reshape(1, -1))[0][0][0] )
 
 
 
 
+    if  closest_same_class and  closest_diff_class :
+        analysis(mode, cl, closest_same_class, closest_diff_class)
+    else:
+        return
+
+
+        
+def main(mode):
+    csv = pd.read_csv("data/{}/features.csv".format(mode), names=["Idx", "Class", "Path"], low_memory=False)
+    classes = get_classes(csv)
+    knn_diff = NearestNeighbors(algorithm="brute", n_neighbors=1, metric=my_distance)
+
+
+    # for cl in tqdm(classes[:len(classes) // 4], desc="Total"):
+    # for cl in tqdm(classes[len(classes) // 4:len(classes) // 2], desc="Total"):
+    # for cl in tqdm(classes[len(classes) // 2:(len(classes) // 2)+len(classes) // 4], desc="Total"):
+    # for cl in tqdm(classes[(len(classes) // 2)+len(classes) // 4:], desc="Total"):
+    for cl in ['8']:
+        try: same = load_pckl('data/{}/same_index.pckl'.format(mode))[cl]
+        except: continue
+        knn_diff.fit(rng.choice(load_pckl('data/{}/diff_index.pckl'.format(mode))[cl], 20000, axis=0))
+        closest(csv, cl, mode, same, knn_diff)
 if __name__ == "__main__":
-    a = Analysis("features")
-    a.compute_avg_diff()
+    main("train_non_torch")

@@ -5,7 +5,8 @@ import random
 import cv2
 import glob2
 
-imagePaths = list(glob2.glob("data/figures/test_non_torch_take_2/**/*.png"))
+imagePaths = list(glob2.glob("data/figures/test_non_torch-take-5/**/*.png"))
+print(len(imagePaths))
 random.shuffle(imagePaths)
 
 
@@ -17,6 +18,7 @@ for imagePath in imagePaths:
 	image = cv2.imread(imagePath)
 	images.append(image)
 # construct the montages for the images
-montages = build_montages(images, (300, 400), (9, 8))
+montages = build_montages(images, (400, 600), (11, 3))
 
-cv2.imwrite("montage.png", montages[0])
+
+cv2.imwrite("data/figures/test_non_torch-take-5/test_nt-t5.png", montages[0])
