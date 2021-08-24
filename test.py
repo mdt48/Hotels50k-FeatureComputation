@@ -33,7 +33,7 @@ def sample(file_list, N):
     return sample
 
 
-def test(segmentation_module, loader, gpu, query):
+def test(segmentation_module, loader, gpu):
     segmentation_module.eval()
 
     # pbar = tqdm(total=len(loader))
@@ -44,7 +44,8 @@ def test(segmentation_module, loader, gpu, query):
                    batch_data['img_ori'].shape[1])
         img_resized_list = batch_data['img_data']
 
-        get_image_path(batch_data)
+        
+
         
         with torch.no_grad():
             scores = torch.zeros(1, cfg.DATASET.num_class, segSize[0], segSize[1])
@@ -63,14 +64,9 @@ def test(segmentation_module, loader, gpu, query):
 
             _, pred = torch.max(scores, dim=1)
             pred = as_numpy(pred.squeeze(0).cpu())
-        
-        img_rep, acc_classes = features.compute_image_representation(features.feat_150, features.feat_2048_whole, features.path, False if query else True)
 
-        #if query call knn
-        # if query:
-        #     knn = Search.kNN()
-        #     print(knn.search(img_rep, acc_classes))
-        #     # knn.search(img_rep, acc_classes)
+        feature = features.Feature(fc_feature=features.fc_feature, pred_feature=features.pred_feature, save_path=get_image_path(batch_data))
+        feature.compute_image_rep()
 
 def get_image_path(batch_data):
     import os
@@ -80,12 +76,11 @@ def get_image_path(batch_data):
     img = batch_data['info'].split("/")[-1].split(".")[0]
 
 
-    path = os.path.join("data/test", chain, h_id, source, img)
+    path = os.path.join("data/train_non_torch", chain, h_id, source, img)
     if not os.path.exists(path):
         os.makedirs(path)
 
     # print(path)
-    features.path = path;
     if not os.path.exists(path):
         os.makedirs(path)
         
@@ -124,7 +119,7 @@ def main(cfg, gpu, query):
     segmentation_module.cuda()
 
     # Main loop
-    test(segmentation_module, loader_test, gpu, query)
+    test(segmentation_module, loader_test, gpu)
 
     print('Inference done!')
 
@@ -196,6 +191,10 @@ if __name__ == '__main__':
         if args.imgs.endswith(".pckl"):
             with open(args.imgs, "rb") as pckl:
                 imgs = pickle.load(pckl)
+                imgs.reverse()
+                # imgs = imgs[:len(imgs)-17566]
+                imgs = imgs
+  
         else:
             imgs = [args.imgs]
     else:

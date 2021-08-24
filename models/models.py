@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torchvision
 from . import resnet
-from lib.nn import SynchronizedBatchNorm2d
 import features
+from lib.nn import SynchronizedBatchNorm2d
 BatchNorm2d = SynchronizedBatchNorm2d
 
 
@@ -172,8 +172,9 @@ class ResnetDilated(nn.Module):
         self.layer2 = orig_resnet.layer2
         self.layer3 = orig_resnet.layer3
         self.layer4 = orig_resnet.layer4
-        self.fc = orig_resnet.fc
-        self.AvgPool = nn.AdaptiveAvgPool2d((1,1))
+        # self.fc = orig_resnet.fc
+        self.fc = nn.Linear(2048, 128)
+        self.AvgPool = orig_resnet.avgpool
 
     def _nostride_dilate(self, m, dilate):
         classname = m.__class__.__name__
@@ -203,12 +204,12 @@ class ResnetDilated(nn.Module):
         x = self.layer3(x); conv_out.append(x);
         x = self.layer4(x); conv_out.append(x);
 
-        # [1, 2048, m, n]
-        output = self.AvgPool(x)
-        output = torch.flatten(output, 1)
-        # torch.save(x, features.path+"/2048-features.pt")
-        features.feat_2048 = output
-        features.feat_2048_whole = x
+        # begin addition of code to extract features
+        pooled = self.AvgPool(x).permute((0,3,2,1))
+        fc = self.fc(pooled)
+        features.fc_feature = fc
+        # end extraction
+
         if return_feature_maps:
             return conv_out
         return [x]
@@ -315,7 +316,7 @@ class PPMDeepsup(nn.Module):
             
             # x = [1,162,full height, full width]
             # torch.save(x, features.path+"/162-features.pt")
-            features.feat_150 = x
+            features.pred_feature = x
             
             return x
 
