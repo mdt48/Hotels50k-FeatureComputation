@@ -65,8 +65,10 @@ def test(segmentation_module, loader, gpu):
             _, pred = torch.max(scores, dim=1)
             pred = as_numpy(pred.squeeze(0).cpu())
 
+
         feature = features.Feature(fc_feature=features.fc_feature, pred_feature=features.pred_feature, save_path=get_image_path(batch_data))
         feature.compute_image_rep()
+
 
 def get_image_path(batch_data):
     import os
